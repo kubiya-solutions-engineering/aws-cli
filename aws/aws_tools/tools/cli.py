@@ -45,8 +45,7 @@ class CLITools:
             """,
             args=[
                 Arg(name="command", description="The command to pass to the AWS CLI (e.g., 's3 ls', 'ec2 describe-instances', 'iam list-users')", required=True)
-            ],
-            image="amazon/aws-cli:latest"
+            ]
         )
 
 CLITools()
