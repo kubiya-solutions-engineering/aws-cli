@@ -9,21 +9,23 @@ class AWSCliTool(Tool):
     def __init__(self, name, description, content, args=None, image="python:3.11-slim"):
         setup_script = """
 set -eu
-
-# Set noninteractive frontend to silence all debconf prompts
 export DEBIAN_FRONTEND=noninteractive
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+export PYTHONWARNINGS="ignore"
 
-# Install AWS CLI and kubectl silently
+# Suppress apt-get install logs
 apt-get update -qq >/dev/null
 apt-get install -y -qq curl unzip bash python3-pip >/dev/null
 
-pip install awscli --quiet >/dev/null
+# Install AWS CLI (suppress all output)
+pip install awscli --quiet >/dev/null 2>&1
 
+# Install kubectl silently
 curl -sLO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
 install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 rm -f kubectl
 
-# Inject Kubernetes context silently
+# Inject Kubernetes context (quiet)
 TOKEN_LOCATION="/tmp/kubernetes_context_token"
 CERT_LOCATION="/tmp/kubernetes_context_cert"
 if [ -f $TOKEN_LOCATION ] && [ -f $CERT_LOCATION ]; then
