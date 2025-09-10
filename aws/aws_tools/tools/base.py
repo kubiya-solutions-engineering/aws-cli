@@ -52,17 +52,6 @@ echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION"
 echo "AWS_ENDPOINT_URL=$AWS_ENDPOINT_URL"
 """
         full_content = f"{aws_setup}\n{content}"
-
-        file_specs = [
-            FileSpec(
-                source="$HOME/.aws/credentials",
-                destination="/root/.aws/credentials"
-            ),
-            FileSpec(
-                source="$HOME/.aws/config",
-                destination="/root/.aws/config"
-            )
-        ]
         
         super().__init__(
             name=name,
