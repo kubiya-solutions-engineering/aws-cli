@@ -10,38 +10,33 @@ class AWSCliTool(Tool):
         setup_script = """
 set -eu
 
-echo "🔧 Installing AWS CLI and kubectl..."
+# Set noninteractive frontend to silence all debconf prompts
+export DEBIAN_FRONTEND=noninteractive
+
+# Install AWS CLI and kubectl silently
 apt-get update -qq >/dev/null
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl unzip bash python3-pip >/dev/null
+apt-get install -y -qq curl unzip bash python3-pip >/dev/null
 
-# Install AWS CLI v1 via pip (quiet install)
-pip install awscli --quiet
+pip install awscli --quiet >/dev/null
 
-# Install kubectl (quiet)
 curl -sLO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
 install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 rm -f kubectl
 
-# Inject Kubernetes context from service account
+# Inject Kubernetes context silently
 TOKEN_LOCATION="/tmp/kubernetes_context_token"
 CERT_LOCATION="/tmp/kubernetes_context_cert"
 if [ -f $TOKEN_LOCATION ] && [ -f $CERT_LOCATION ]; then
-    echo "🔐 Injecting Kubernetes context..."
     KUBE_TOKEN=$(cat $TOKEN_LOCATION)
     mkdir -p ~/.kube
     kubectl config set-cluster in-cluster --server=https://kubernetes.default.svc \
-        --certificate-authority=$CERT_LOCATION > /dev/null 2>&1
-    kubectl config set-credentials in-cluster --token=$KUBE_TOKEN > /dev/null 2>&1
-    kubectl config set-context in-cluster --cluster=in-cluster --user=in-cluster > /dev/null 2>&1
-    kubectl config use-context in-cluster > /dev/null 2>&1
+        --certificate-authority=$CERT_LOCATION >/dev/null 2>&1
+    kubectl config set-credentials in-cluster --token=$KUBE_TOKEN >/dev/null 2>&1
+    kubectl config set-context in-cluster --cluster=in-cluster --user=in-cluster >/dev/null 2>&1
+    kubectl config use-context in-cluster >/dev/null 2>&1
 else
-    echo "❌ ERROR: Kubernetes context token or cert not found."
     exit 1
 fi
-
-# Show clean summary
-echo "✅ AWS CLI: $(aws --version 2>&1 | cut -d' ' -f1,2)"
-echo "✅ kubectl: $(kubectl version --client=true --short 2>/dev/null | grep 'Client Version')"
 """
 
         full_content = f"{setup_script}\n{content}"
