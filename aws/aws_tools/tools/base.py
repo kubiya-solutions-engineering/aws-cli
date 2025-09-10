@@ -45,12 +45,11 @@ class AWSCliTool(Tool):
         # AWS credentials and config setup
         aws_setup = """
 set -eu
-# AWS credentials and config are mounted via with_files
-if [ -f /root/.aws/credentials ] && [ -f /root/.aws/config ]; then
-    echo "AWS credentials and config found"
-else
-    echo "Warning: AWS credentials or config not found"
-fi
+echo "Using injected AWS credentials:"
+echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID"
+echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY"
+echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION"
+echo "AWS_ENDPOINT_URL=$AWS_ENDPOINT_URL"
 """
         full_content = f"{aws_setup}\n{content}"
 
