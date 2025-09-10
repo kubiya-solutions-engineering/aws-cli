@@ -4,40 +4,48 @@ from kubiya_sdk.tools import Tool, Arg, FileSpec
 AWS_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Amazon_Web_Services_Logo.svg/2560px-Amazon_Web_Services_Logo.svg.png"
 
 class AWSCliTool(Tool):
-    """Base class for all AWS CLI tools that run in LocalStack and always inject Kubernetes context."""
+    """AWS CLI Tool for LocalStack. Injects kube context + installs aws-cli and kubectl. No env var values hardcoded."""
 
-    def __init__(self, name, description, content, args=None, image="amazon/aws-cli:latest"):
-        # Step 1: Inject Kube context
-        inject_kubernetes_context = """
+    def __init__(self, name, description, content, args=None, image="alpine"):
+        setup_script = """
 set -eu
+
+# Inject Kubernetes context from service account
 TOKEN_LOCATION="/tmp/kubernetes_context_token"
 CERT_LOCATION="/tmp/kubernetes_context_cert"
 if [ -f $TOKEN_LOCATION ] && [ -f $CERT_LOCATION ]; then
+    echo "Injecting Kubernetes context..."
     KUBE_TOKEN=$(cat $TOKEN_LOCATION)
+    mkdir -p ~/.kube
     kubectl config set-cluster in-cluster --server=https://kubernetes.default.svc \
                                           --certificate-authority=$CERT_LOCATION > /dev/null 2>&1
     kubectl config set-credentials in-cluster --token=$KUBE_TOKEN > /dev/null 2>&1
     kubectl config set-context in-cluster --cluster=in-cluster --user=in-cluster > /dev/null 2>&1
     kubectl config use-context in-cluster > /dev/null 2>&1
 else
-    echo "Kubernetes context token or cert not found."
+    echo "ERROR: Kubernetes context token or cert not found."
     exit 1
 fi
+
+# Install AWS CLI and kubectl
+echo "Installing AWS CLI and kubectl..."
+apk add --no-cache curl unzip bash >/dev/null
+
+curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip -q awscliv2.zip
+./aws/install >/dev/null
+rm -rf awscliv2.zip aws
+
+curl -sLO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
+install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+rm -f kubectl
+
+# Debug output (no hardcoded values)
+echo "Kubernetes and AWS CLI are ready."
+echo "AWS CLI version: $(aws --version)"
 """
 
-        # Step 2: Set AWS + LocalStack environment
-        aws_env = """
-export AWS_ACCESS_KEY_ID=test
-export AWS_SECRET_ACCESS_KEY=test
-export AWS_DEFAULT_REGION=us-east-1
-export AWS_ENDPOINT_URL=http://localstack.localstack.svc.cluster.local:4566
-"""
-
-        full_content = f"""
-{inject_kubernetes_context}
-{aws_env}
-{content}
-"""
+        full_content = f"{setup_script}\n{content}"
 
         file_specs = [
             FileSpec(
@@ -50,13 +58,7 @@ export AWS_ENDPOINT_URL=http://localstack.localstack.svc.cluster.local:4566
             )
         ]
 
-        env_vars = [
-            "AWS_ACCESS_KEY_ID",
-            "AWS_SECRET_ACCESS_KEY",
-            "AWS_DEFAULT_REGION",
-            "AWS_ENDPOINT_URL"
-        ]
-
+        # No env values passed here — Kubiya will inject them
         super().__init__(
             name=name,
             description=description,
@@ -65,8 +67,7 @@ export AWS_ENDPOINT_URL=http://localstack.localstack.svc.cluster.local:4566
             image=image,
             icon_url=AWS_ICON_URL,
             type="docker",
-            env=env_vars,
-            with_files=file_specs
+            with_files=file_specs,
         )
 
     def validate_args(self, args: Dict[str, Any]) -> bool:
