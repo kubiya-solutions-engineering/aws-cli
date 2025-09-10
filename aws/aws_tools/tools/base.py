@@ -63,7 +63,9 @@ echo "✅ kubectl version: $(kubectl version --client=true --short)"
             image=image,
             icon_url=AWS_ICON_URL,
             type="docker",
-            with_files=file_specs
+            with_files=file_specs,
+            env=["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_DEFAULT_REGION","AWS_ENDPOINT_URL"
+]
         )
 
     def validate_args(self, args: Dict[str, Any]) -> bool:
