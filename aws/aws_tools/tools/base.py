@@ -4,26 +4,24 @@ from kubiya_sdk.tools import Tool, Arg, FileSpec
 AWS_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Amazon_Web_Services_Logo.svg/2560px-Amazon_Web_Services_Logo.svg.png"
 
 class AWSCliTool(Tool):
-    """AWS CLI Tool for LocalStack. Injects kube context + installs aws-cli and kubectl. No env var values hardcoded."""
+    """Base AWS CLI tool for LocalStack with Kubernetes context injection and pip-based AWS CLI install."""
 
-    def __init__(self, name, description, content, args=None, image="alpine"):
+    def __init__(self, name, description, content, args=None, image="python:3.11-slim"):
         setup_script = """
 set -eu
 
-# --- Step 1: Install kubectl + AWS CLI ---
 echo "Installing AWS CLI and kubectl..."
-apk add --no-cache curl unzip bash >/dev/null
+apt-get update && apt-get install -y curl unzip bash python3-pip >/dev/null
 
-curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip -q awscliv2.zip
-./aws/install >/dev/null
-rm -rf awscliv2.zip aws
+# Install AWS CLI v1 via pip (faster + works in slim containers)
+pip install awscli >/dev/null
 
+# Install kubectl
 curl -sLO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
 install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 rm -f kubectl
 
-# --- Step 2: Inject Kubernetes context ---
+# Inject Kubernetes context from service account
 TOKEN_LOCATION="/tmp/kubernetes_context_token"
 CERT_LOCATION="/tmp/kubernetes_context_cert"
 if [ -f $TOKEN_LOCATION ] && [ -f $CERT_LOCATION ]; then
@@ -40,8 +38,8 @@ else
     exit 1
 fi
 
-echo "✅ kubectl and AWS CLI are ready"
-"AWS CLI version: $(aws --version)"
+echo "✅ AWS CLI version: $(aws --version)"
+echo "✅ kubectl version: $(kubectl version --client=true --short)"
 """
 
         full_content = f"{setup_script}\n{content}"
@@ -57,7 +55,6 @@ echo "✅ kubectl and AWS CLI are ready"
             )
         ]
 
-        # No env values passed here — Kubiya will inject them
         super().__init__(
             name=name,
             description=description,
@@ -66,7 +63,7 @@ echo "✅ kubectl and AWS CLI are ready"
             image=image,
             icon_url=AWS_ICON_URL,
             type="docker",
-            with_files=file_specs,
+            with_files=file_specs
         )
 
     def validate_args(self, args: Dict[str, Any]) -> bool:
@@ -76,4 +73,3 @@ echo "✅ kubectl and AWS CLI are ready"
     def get_error_message(self, args: Dict[str, Any]) -> Optional[str]:
         missing = [arg.name for arg in self.args if arg.required and not args.get(arg.name)]
         return f"Missing required arguments: {', '.join(missing)}" if missing else None
-
