@@ -10,7 +10,20 @@ class AWSCliTool(Tool):
         setup_script = """
 set -eu
 
-# Inject Kubernetes context from service account
+# --- Step 1: Install kubectl + AWS CLI ---
+echo "Installing AWS CLI and kubectl..."
+apk add --no-cache curl unzip bash >/dev/null
+
+curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip -q awscliv2.zip
+./aws/install >/dev/null
+rm -rf awscliv2.zip aws
+
+curl -sLO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
+install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+rm -f kubectl
+
+# --- Step 2: Inject Kubernetes context ---
 TOKEN_LOCATION="/tmp/kubernetes_context_token"
 CERT_LOCATION="/tmp/kubernetes_context_cert"
 if [ -f $TOKEN_LOCATION ] && [ -f $CERT_LOCATION ]; then
@@ -27,22 +40,8 @@ else
     exit 1
 fi
 
-# Install AWS CLI and kubectl
-echo "Installing AWS CLI and kubectl..."
-apk add --no-cache curl unzip bash >/dev/null
-
-curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip -q awscliv2.zip
-./aws/install >/dev/null
-rm -rf awscliv2.zip aws
-
-curl -sLO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
-install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-rm -f kubectl
-
-# Debug output (no hardcoded values)
-echo "Kubernetes and AWS CLI are ready."
-echo "AWS CLI version: $(aws --version)"
+echo "✅ kubectl and AWS CLI are ready"
+"AWS CLI version: $(aws --version)"
 """
 
         full_content = f"{setup_script}\n{content}"
@@ -77,3 +76,4 @@ echo "AWS CLI version: $(aws --version)"
     def get_error_message(self, args: Dict[str, Any]) -> Optional[str]:
         missing = [arg.name for arg in self.args if arg.required and not args.get(arg.name)]
         return f"Missing required arguments: {', '.join(missing)}" if missing else None
+
