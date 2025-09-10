@@ -74,7 +74,7 @@ fi
             icon_url=AWS_ICON_URL,
             type="docker",
             with_files=file_specs,
-            env=["AWS_PROFILE"]
+            env=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "AWS_ENDPOINT_URL"]
         )
 
     def get_args(self) -> List[Arg]:
