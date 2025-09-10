@@ -3,56 +3,60 @@ from kubiya_sdk.tools import Tool, Arg, FileSpec
 
 AWS_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Amazon_Web_Services_Logo.svg/2560px-Amazon_Web_Services_Logo.svg.png"
 
-DEFAULT_MERMAID = """
-```mermaid
-classDiagram
-    class Tool {
-        <<interface>>
-        +get_args()
-        +get_content()
-        +get_image()
-    }
-    class AWSCliTool {
-        -content: str
-        -args: List[Arg]
-        -image: str
-        +__init__(name, description, content, args, image)
-        +get_args()
-        +get_content()
-        +get_image()
-        +get_file_specs()
-        +validate_args(args)
-        +get_error_message(args)
-        +get_environment()
-    }
-    Tool <|-- AWSCliTool
-```
+class AWSCliTool(Tool):
+    """Base class for all AWS CLI tools that run in LocalStack and always inject Kubernetes context."""
+
+    def __init__(self, name, description, content, args=None, image="amazon/aws-cli:latest"):
+        # Step 1: Inject Kube context
+        inject_kubernetes_context = """
+set -eu
+TOKEN_LOCATION="/tmp/kubernetes_context_token"
+CERT_LOCATION="/tmp/kubernetes_context_cert"
+if [ -f $TOKEN_LOCATION ] && [ -f $CERT_LOCATION ]; then
+    KUBE_TOKEN=$(cat $TOKEN_LOCATION)
+    kubectl config set-cluster in-cluster --server=https://kubernetes.default.svc \
+                                          --certificate-authority=$CERT_LOCATION > /dev/null 2>&1
+    kubectl config set-credentials in-cluster --token=$KUBE_TOKEN > /dev/null 2>&1
+    kubectl config set-context in-cluster --cluster=in-cluster --user=in-cluster > /dev/null 2>&1
+    kubectl config use-context in-cluster > /dev/null 2>&1
+else
+    echo "Kubernetes context token or cert not found."
+    exit 1
+fi
 """
 
-class AWSCliTool(Tool):
-    """Base class for all AWS CLI tools."""
-    
-    name: str
-    description: str
-    content: str = ""
-    args: List[Arg] = []
-    image: str = "amazon/aws-cli:latest"
-    icon_url: str = AWS_ICON_URL
-    type: str = "docker"
-    mermaid: str = DEFAULT_MERMAID
-    
-    def __init__(self, name, description, content, args=None, image="amazon/aws-cli:latest"):
-        # AWS credentials and config setup
-        aws_setup = """
-set -eu
-echo "Using injected AWS credentials:"
-echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID"
-echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY"
-echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION"
-echo "AWS_ENDPOINT_URL=$AWS_ENDPOINT_URL"
+        # Step 2: Set AWS + LocalStack environment
+        aws_env = """
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_ENDPOINT_URL=http://localstack.localstack.svc.cluster.local:4566
 """
-        full_content = f"{aws_setup}\n{content}"
-        
+
+        full_content = f"""
+{inject_kubernetes_context}
+{aws_env}
+{content}
+"""
+
+        file_specs = [
+            FileSpec(
+                source="/var/run/secrets/kubernetes.io/serviceaccount/token",
+                destination="/tmp/kubernetes_context_token"
+            ),
+            FileSpec(
+                source="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+                destination="/tmp/kubernetes_context_cert"
+            )
+        ]
+
+        env_vars = [
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_DEFAULT_REGION",
+            "AWS_ENDPOINT_URL"
+        ]
+
         super().__init__(
             name=name,
             description=description,
@@ -61,33 +65,14 @@ echo "AWS_ENDPOINT_URL=$AWS_ENDPOINT_URL"
             image=image,
             icon_url=AWS_ICON_URL,
             type="docker",
-            env=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "AWS_ENDPOINT_URL"]
+            env=env_vars,
+            with_files=file_specs
         )
 
-    def get_args(self) -> List[Arg]:
-        """Return the tool's arguments."""
-        return self.args
-
-    def get_content(self) -> str:
-        """Return the tool's shell script content."""
-        return self.content
-
-    def get_image(self) -> str:
-        """Return the Docker image to use."""
-        return self.image
-
     def validate_args(self, args: Dict[str, Any]) -> bool:
-        """Validate the provided arguments."""
         required_args = [arg.name for arg in self.args if arg.required]
         return all(arg in args and args[arg] for arg in required_args)
 
     def get_error_message(self, args: Dict[str, Any]) -> Optional[str]:
-        """Return error message if arguments are invalid."""
-        missing_args = []
-        for arg in self.args:
-            if arg.required and (arg.name not in args or not args[arg.name]):
-                missing_args.append(arg.name)
-        
-        if missing_args:
-            return f"Missing required arguments: {', '.join(missing_args)}"
-        return None
+        missing = [arg.name for arg in self.args if arg.required and not args.get(arg.name)]
+        return f"Missing required arguments: {', '.join(missing)}" if missing else None
