@@ -11,7 +11,7 @@ class AWSCliTool(Tool):
 set -eu
 
 # Download and install kubectl (curl is already available in AWS CLI image)
-curl -LO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
+curl -sLO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
 chmod +x kubectl
 mv kubectl /usr/local/bin/
 
