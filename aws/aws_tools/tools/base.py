@@ -10,9 +10,7 @@ class AWSCliTool(Tool):
         setup_script = """
 set -eu
 
-# Install kubectl for Kubernetes context setup (Amazon Linux uses yum)
-yum update -y -q
-yum install -y -q curl
+# Download and install kubectl (curl is already available in AWS CLI image)
 curl -LO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
 chmod +x kubectl
 mv kubectl /usr/local/bin/
