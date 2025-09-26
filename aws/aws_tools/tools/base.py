@@ -4,28 +4,19 @@ from kubiya_sdk.tools import Tool, Arg, FileSpec
 AWS_ICON_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Amazon_Web_Services_Logo.svg/2560px-Amazon_Web_Services_Logo.svg.png"
 
 class AWSCliTool(Tool):
-    """Base AWS CLI tool for LocalStack with Kubernetes context injection and pip-based AWS CLI install."""
+    """Base AWS CLI tool for LocalStack with Kubernetes context injection."""
 
-    def __init__(self, name, description, content, args=None, image="python:3.11-slim"):
+    def __init__(self, name, description, content, args=None, image="amazon/aws-cli:latest"):
         setup_script = """
 set -eu
-export DEBIAN_FRONTEND=noninteractive
-export PIP_DISABLE_PIP_VERSION_CHECK=1
-export PYTHONWARNINGS="ignore"
 
-# Suppress apt-get install logs
-apt-get update -qq >/dev/null
-apt-get install -y -qq curl unzip bash python3-pip >/dev/null
+# Install kubectl for Kubernetes context setup
+apk add --no-cache curl
+curl -LO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
+chmod +x kubectl
+mv kubectl /usr/local/bin/
 
-# Install AWS CLI (suppress all output)
-pip install awscli --quiet >/dev/null 2>&1
-
-# Install kubectl silently
-curl -sLO "https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl"
-install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-rm -f kubectl
-
-# Inject Kubernetes context (quiet)
+# Inject Kubernetes context for LocalStack communication
 TOKEN_LOCATION="/tmp/kubernetes_context_token"
 CERT_LOCATION="/tmp/kubernetes_context_cert"
 if [ -f $TOKEN_LOCATION ] && [ -f $CERT_LOCATION ]; then
@@ -37,7 +28,7 @@ if [ -f $TOKEN_LOCATION ] && [ -f $CERT_LOCATION ]; then
     kubectl config set-context in-cluster --cluster=in-cluster --user=in-cluster >/dev/null 2>&1
     kubectl config use-context in-cluster >/dev/null 2>&1
 else
-    exit 1
+    echo "Warning: Kubernetes context files not found, LocalStack communication may fail"
 fi
 """
 
@@ -63,8 +54,7 @@ fi
             icon_url=AWS_ICON_URL,
             type="docker",
             with_files=file_specs,
-            env=["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_DEFAULT_REGION","AWS_ENDPOINT_URL"
-]
+            env=["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_DEFAULT_REGION","AWS_ENDPOINT_URL"]
         )
 
     def validate_args(self, args: Dict[str, Any]) -> bool:
